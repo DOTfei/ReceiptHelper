@@ -463,18 +463,16 @@
             border-radius: 4px;
         }
 
-        .btn-icon {
-            background: none;
-            border: none;
-            cursor: pointer;
-            font-size: 1rem;
-            padding: 0;
-            opacity: 0.5;
-            transition: opacity 0.2s;
+        .input-receipt:not([readonly]) {
+            border: 1px solid var(--c-primary);
+            background: white;
+            padding: 0.25rem;
+            border-radius: 4px;
         }
 
-        .btn-icon:hover {
-            opacity: 1;
+        .input-receipt[readonly] {
+            cursor: pointer;
+            /* Indicate it's clickable */
         }
     </style>
 </head>
@@ -527,8 +525,8 @@
                 <div class="info-group" style="align-items: flex-end;">
                     <label class="label">Receipt No.</label>
                     <div class="receipt-no-container">
-                        <input type="text" id="receiptNo" class="input-receipt" value="Loading..." readonly>
-                        <button class="btn-icon" onclick="toggleEditReceiptNo()" title="Edit Receipt No">✏️</button>
+                        <input type="text" id="receiptNo" class="input-receipt" value="Loading..." readonly
+                            title="Click to Edit">
                     </div>
                 </div>
 
@@ -589,7 +587,21 @@
             setCurrentDate();
             fetchNextId();
             addItem(); // Add one empty row by default
+            setupReceiptNoEdit();
         });
+
+        function setupReceiptNoEdit() {
+            const input = document.getElementById('receiptNo');
+
+            input.addEventListener('click', () => {
+                input.removeAttribute('readonly');
+                input.focus();
+            });
+
+            input.addEventListener('blur', () => {
+                input.setAttribute('readonly', 'true');
+            });
+        }
 
         function setCurrentDate() {
             const now = new Date();
@@ -598,15 +610,7 @@
             document.getElementById('receiptDate').textContent = `${dateStr} ${timeStr}`;
         }
 
-        function toggleEditReceiptNo() {
-            const input = document.getElementById('receiptNo');
-            if (input.hasAttribute('readonly')) {
-                input.removeAttribute('readonly');
-                input.focus();
-            } else {
-                input.setAttribute('readonly', 'true');
-            }
-        }
+
 
         // --- Data Operations ---
 
