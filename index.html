@@ -463,16 +463,8 @@
             border-radius: 4px;
         }
 
-        .input-receipt:not([readonly]) {
-            border: 1px solid var(--c-primary);
-            background: white;
-            padding: 0.25rem;
-            border-radius: 4px;
-        }
-
         .input-receipt[readonly] {
             cursor: pointer;
-            /* Indicate it's clickable */
         }
     </style>
 </head>
@@ -610,7 +602,6 @@
         }
 
 
-
         // --- Data Operations ---
 
         function fetchNextId() {
@@ -628,7 +619,35 @@
                 });
         }
 
-        function saveToDatabase() {
+        /**
+         * Helper to generate PDF Blob Base64
+         */
+        async function getPdfBase64() {
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pages = document.querySelectorAll('.page');
+
+            for (let i = 0; i < pages.length; i++) {
+                if (i > 0) pdf.addPage();
+
+                // Capture the page content
+                // We use scale: 2 for better quality images
+                const canvas = await html2canvas(pages[i], { scale: 2, useCORS: true });
+                const imgData = canvas.toDataURL('image/png');
+
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const imgProps = pdf.getImageProperties(imgData);
+                const imgHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, imgHeight);
+            }
+
+            // Return clean base64 (without prefix)
+            const dataUri = pdf.output('datauristring');
+            return dataUri.replace('data:application/pdf;base64,', '');
+        }
+
+        async function saveToDatabase() {
             const btn = document.getElementById('btnSave');
             const status = document.getElementById('statusMessage');
 
@@ -639,56 +658,84 @@
             }
 
             const receiptNo = document.getElementById('receiptNo').value;
-            const date = document.getElementById('receiptDate').textContent;
+            const dateStr = document.getElementById('receiptDate').textContent;
             const total = document.getElementById('grandTotal').textContent;
+
+            // Extract Year and Month from dateStr (DD/MM/YYYY)
+            // Example: 17/12/2025 -> Year: 2025, Month: December
+            let year = "";
+            let monthName = "";
+            try {
+                const [d, m, y] = dateStr.split('/');
+                year = y;
+                // javascript months are 0-indexed (0=Jan, 11=Dec)
+                monthName = new Date(parseInt(y), parseInt(m) - 1, parseInt(d)).toLocaleString('default', { month: 'long' });
+            } catch (e) {
+                console.error("Date parse error", e);
+            }
 
             // Gather Items across ALL pages
             const items = [];
             document.querySelectorAll('.items-body tr').forEach(tr => {
-                const desc = tr.querySelector('.desc-input').value.trim();
-                const amt = tr.querySelector('.amount-input').value;
-                if (desc || amt) {
-                    items.push(`${desc} (${amt})`);
+                const descVal = tr.querySelector('.desc-input').value.trim();
+                const amtVal = tr.querySelector('.amount-input').value;
+                if (descVal || amtVal) {
+                    items.push(`${descVal} (${amtVal})`);
                 }
             });
             const descriptionStr = items.join(', ');
 
-            const payload = {
-                receiptNo: receiptNo,
-                date: date,
-                name: clientName,
-                description: descriptionStr,
-                total: total
-            };
-
+            // UI Feedback
             btn.disabled = true;
-            btn.textContent = "Saving...";
-            status.textContent = "Sending data...";
+            btn.textContent = "Generating PDF...";
+            status.textContent = "Creating receipt file...";
 
-            fetch(SCRIPT_URL, {
-                method: 'POST',
-                mode: 'no-cors',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            })
-                .then(() => {
-                    alert("Saved Successfully!");
-                    btn.textContent = "Saved";
-                    status.textContent = "Data sent to server";
-                    setTimeout(() => {
-                        btn.disabled = false;
-                        btn.textContent = "Save to DB";
-                        status.textContent = "Ready";
-                        fetchNextId();
-                    }, 2000);
-                })
-                .catch(err => {
-                    console.error('Save error:', err);
-                    alert("Failed to save. Check console.");
+            try {
+                // 1. Generate PDF First
+                const pdfBase64 = await getPdfBase64();
+
+                // 2. Prepare Payload
+                const payload = {
+                    receiptNo: receiptNo,
+                    date: dateStr,
+                    name: clientName,
+                    description: descriptionStr,
+                    total: total,
+                    pdfBase64: pdfBase64,
+                    year: year,
+                    month: monthName
+                };
+
+                // 3. Send
+                btn.textContent = "Saving...";
+                status.textContent = "Sending data to Database...";
+
+                await fetch(SCRIPT_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                // 4. Success
+                alert("Saved Successfully!");
+                btn.textContent = "Saved";
+                status.textContent = "Data sent to server";
+
+                setTimeout(() => {
                     btn.disabled = false;
                     btn.textContent = "Save to DB";
-                    status.textContent = "Error";
-                });
+                    status.textContent = "Ready";
+                    fetchNextId();
+                }, 2000);
+
+            } catch (err) {
+                console.error('Save error:', err);
+                alert("Failed to save or generate PDF. Check console.");
+                btn.disabled = false;
+                btn.textContent = "Save to DB";
+                status.textContent = "Error";
+            }
         }
 
         // --- Multi-Page Logic ---
@@ -714,8 +761,6 @@
 
         function checkPagination(page) {
             // Robust Height Check
-            // We use 'scrollHeight' (total content height) vs 'clientHeight' (visible height constrained by CSS if any, or A4 height if set)
-            // A4 Height is ~1123px. We check if content flows over 1050px safe limit or actual div height.
             if (page.scrollHeight > page.clientHeight + 1) {
                 createNewPage(page);
             }
@@ -735,10 +780,8 @@
             // Update Header Title for Pagination
             const title = headerContent.querySelector('.receipt-title');
             if (title) {
-                // Keep "RECEIPT" but maybe add page info subtly if desired, or keep as is.
-                // User asked for "Simplified Header (Logo + 'Page 2')".
                 title.textContent = "RECEIPT (Pg " + newPageNum + ")";
-                title.style.fontSize = "1.5rem"; // Slightly smaller
+                title.style.fontSize = "1.5rem";
             }
 
             // 2. New Items Table
@@ -775,7 +818,7 @@
                 startNewTable.querySelector('.items-body').appendChild(lastRow);
             }
 
-            // Re-check just in case (e.g. if the row itself was huge)
+            // Re-check just in case
             checkPagination(newPage);
         }
 
@@ -789,12 +832,11 @@
             tr.remove();
             calculateTotals();
 
-            // Pagination Cleanup: If page became empty (and is not the first one), remove it.
+            // Pagination Cleanup
             if (tbody.children.length === 0 && page.id !== 'page-1') {
                 const prevPage = page.previousElementSibling;
                 const bottomSection = page.querySelector('.bottom-section');
 
-                // If this page had the totals, move them back to the previous page
                 if (bottomSection && prevPage) {
                     prevPage.appendChild(bottomSection);
                 }
@@ -828,6 +870,7 @@
 
         // --- Exports ---
 
+        // Re-use logic for manual download
         async function generatePDF() {
             const { jsPDF } = window.jspdf;
             const pdf = new jsPDF('p', 'mm', 'a4');
@@ -835,13 +878,11 @@
 
             for (let i = 0; i < pages.length; i++) {
                 if (i > 0) pdf.addPage();
-
                 const canvas = await html2canvas(pages[i], { scale: 2, useCORS: true });
                 const imgData = canvas.toDataURL('image/png');
                 const pdfWidth = pdf.internal.pageSize.getWidth();
                 const imgProps = pdf.getImageProperties(imgData);
                 const imgHeight = (imgProps.height * pdfWidth) / imgProps.width;
-
                 pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, imgHeight);
             }
             pdf.save(`Receipt_${document.getElementById('receiptNo').value}.pdf`);
