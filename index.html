@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Receipt Generator - A+ English</title>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Scripts (CDNs) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <style>
+        :root {
+            --font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            --page-width: 210mm;
+            --page-height: 297mm;
+            --c-grey-bg: #e5e7eb;
+            --c-border: #d1d5db;
+            --c-text: #111827;
+            --c-primary: #2563eb;
+            --c-danger: #ef4444;
+            --c-success: #22c55e;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 40px 0;
+            background-color: var(--c-grey-bg);
+            font-family: var(--font-family);
+            color: var(--c-text);
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        /* Control Panel */
+        .control-panel {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 100;
+            width: 220px;
+        }
+
+        .control-panel h3 {
+            margin: 0 0 0.5rem 0;
+            font-size: 0.9rem;
+            color: #4b5563;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: white;
+            gap: 0.5rem;
+        }
+
+        .btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background-color: var(--c-primary);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background-color: #1d4ed8;
+        }
+
+        .btn-success {
+            background-color: var(--c-success);
+        }
+
+        .btn-success:hover:not(:disabled) {
+            background-color: #16a34a;
+        }
+
+        .btn-danger {
+            background-color: var(--c-danger);
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background-color: #dc2626;
+        }
+
+        .btn-outline {
+            background-color: white;
+            border: 1px solid var(--c-border);
+            color: #374151;
+        }
+
+        .btn-outline:hover:not(:disabled) {
+            background-color: #f3f4f6;
+        }
+
+        /* A4 Page */
+        .page {
+            width: var(--page-width);
+            height: var(--page-height);
+            background: white;
+            padding: 20mm;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 20px;
+            /* Space between pages in view */
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 3rem;
+            border-bottom: 2px solid var(--c-primary);
+            padding-bottom: 1rem;
+        }
+
+        .brand-name {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: var(--c-primary);
+            max-width: 60%;
+            text-transform: uppercase;
+            letter-spacing: -0.02em;
+        }
+
+        .receipt-label-container {
+            text-align: right;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+        }
+
+        .receipt-title {
+            font-size: 2rem;
+            font-weight: 900;
+            color: #e5e7eb;
+            /* Light grey */
+            letter-spacing: 0.1em;
+            line-height: 1;
+            margin-bottom: 0.5rem;
+        }
+
+        .logo-img {
+            max-width: 250px;
+            max-height: 120px;
+            object-fit: contain;
+        }
+
+        /* Info Section */
+        .info-section {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 2rem;
+            gap: 2rem;
+        }
+
+        .info-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .label {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .input-bare {
+            font-family: inherit;
+            font-size: 1.1rem;
+            font-weight: 600;
+            padding: 0.5rem;
+            border: 1px solid #e5e7eb;
+            border-radius: 4px;
+            background: #f9fafb;
+            min-width: 250px;
+            color: var(--c-text);
+        }
+
+        .input-bare:focus {
+            outline: 2px solid var(--c-primary);
+            background: white;
+            border-color: transparent;
+        }
+
+        .value-display {
+            font-size: 1.1rem;
+            font-weight: 600;
+            padding: 0.5rem 0;
+            min-height: 2rem;
+        }
+
+        /* Table */
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 2rem;
+            flex-grow: 1;
+            /* Pushes footer down if there is space */
+        }
+
+        .items-table th {
+            text-align: left;
+            padding: 0.75rem;
+            background-color: #f3f4f6;
+            border-bottom: 2px solid #e5e7eb;
+            font-weight: 600;
+            font-size: 0.8rem;
+            color: #374151;
+            text-transform: uppercase;
+        }
+
+        .items-table td {
+            padding: 0.75rem;
+            border-bottom: 1px solid #f3f4f6;
+            vertical-align: top;
+        }
+
+        .col-desc {
+            width: 65%;
+        }
+
+        .col-amount {
+            width: 25%;
+            text-align: right;
+        }
+
+        .col-action {
+            width: 10%;
+            text-align: center;
+        }
+
+        .desc-input {
+            width: 100%;
+            font-family: inherit;
+            border: 1px solid transparent;
+            resize: none;
+            background: transparent;
+            padding: 0.25rem;
+            font-size: 0.95rem;
+            min-height: 1.5rem;
+            overflow: hidden;
+        }
+
+        .desc-input:hover,
+        .desc-input:focus {
+            border-color: #e5e7eb;
+            background: white;
+        }
+
+        .amount-input {
+            width: 100%;
+            text-align: right;
+            border: 1px solid transparent;
+            background: transparent;
+            font-family: inherit;
+            padding: 0.25rem;
+            font-size: 0.95rem;
+            font-weight: 500;
+        }
+
+        .amount-input:hover,
+        .amount-input:focus {
+            border-color: #e5e7eb;
+            background: white;
+        }
+
+        .btn-delete {
+            background: none;
+            border: none;
+            color: #9ca3af;
+            cursor: pointer;
+            font-size: 1.25rem;
+            line-height: 1;
+            padding: 0 0.5rem;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .items-table tr:hover .btn-delete {
+            opacity: 1;
+        }
+
+        .btn-delete:hover {
+            color: var(--c-danger);
+        }
+
+        /* Footer totals */
+        .totals-section {
+            margin-left: auto;
+            width: 300px;
+            margin-bottom: 3rem;
+        }
+
+        .total-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #f3f4f6;
+        }
+
+        .total-row.grand-total {
+            border-top: 2px solid var(--c-text);
+            border-bottom: none;
+            margin-top: 0.5rem;
+            padding-top: 1rem;
+        }
+
+        .total-label {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #4b5563;
+        }
+
+        .grand-total .total-label {
+            font-size: 1.1rem;
+            color: var(--c-text);
+            font-weight: 800;
+        }
+
+        .grand-total .total-amount {
+            font-size: 1.25rem;
+            font-weight: 800;
+            color: var(--c-primary);
+        }
+
+        .discount-input {
+            width: 100px;
+            text-align: right;
+            border: 1px solid #e5e7eb;
+            border-radius: 4px;
+            padding: 2px 4px;
+            font-weight: 500;
+        }
+
+        /* Page Footer */
+        .page-footer {
+            margin-top: auto;
+            text-align: center;
+            font-size: 0.75rem;
+            color: #9ca3af;
+            border-top: 1px solid #e5e7eb;
+            padding-top: 1rem;
+        }
+
+        /* Print Logic */
+        @media print {
+            body {
+                background: none;
+                padding: 0;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+
+            .control-panel {
+                display: none !important;
+            }
+
+            #pages-container {
+                /* Container handles printing flow */
+            }
+
+            .page {
+                box-shadow: none;
+                margin: 0;
+                width: 100%;
+                height: 297mm;
+                /* Force fixed height for print logic */
+                page-break-after: always;
+                break-after: page;
+            }
+
+            .page:last-child {
+                page-break-after: auto;
+            }
+
+            .btn-delete,
+            .col-action {
+                display: none !important;
+            }
+
+            input,
+            textarea,
+            .input-bare,
+            .amount-input,
+            .desc-input,
+            .discount-input {
+                border: none !important;
+                background: transport !important;
+                padding: 0 !important;
+                resize: none !important;
+            }
+
+            ::placeholder {
+                color: transparent;
+            }
+
+            .btn-icon {
+                display: none !important;
+            }
+
+            .input-receipt {
+                border: none !important;
+                background: transparent !important;
+                padding: 0 !important;
+            }
+        }
+
+        .receipt-no-container {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .input-receipt {
+            font-family: inherit;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--c-primary);
+            border: 1px solid transparent;
+            background: transparent;
+            width: 150px;
+            padding: 0;
+            text-align: right;
+        }
+
+        .input-receipt:not([readonly]) {
+            border: 1px solid var(--c-primary);
+            background: white;
+            padding: 0.25rem;
+            border-radius: 4px;
+        }
+
+        .btn-icon {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            padding: 0;
+            opacity: 0.5;
+            transition: opacity 0.2s;
+        }
+
+        .btn-icon:hover {
+            opacity: 1;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Control Panel -->
+    <div class="control-panel" data-html2canvas-ignore="true">
+        <h3>Actions</h3>
+        <button class="btn btn-outline" onclick="addItem()">+ Add Row</button>
+        <button class="btn btn-success" id="btnSave" onclick="saveToDatabase()">Save to DB</button>
+
+        <div style="height: 10px;"></div>
+
+        <h3>Export</h3>
+        <button class="btn btn-primary" onclick="generatePDF()">Download PDF</button>
+        <button class="btn btn-primary" onclick="exportPNG()">Save as PNG</button>
+        <button class="btn btn-primary" onclick="exportExcel()">Export Excel</button>
+
+        <div style="margin-top: 1rem; font-size: 0.75rem; color: #6b7280; text-align: center;">
+            <span id="statusMessage">Ready</span>
+        </div>
+    </div>
+
+    <!-- Pages Container -->
+    <div id="pages-container">
+        <!-- Page 1 (Initial) -->
+        <div class="page" id="page-1">
+
+            <!-- Header -->
+            <header class="header">
+                <div class="brand-name">
+                    A+ English<br>
+                    <span style="font-size: 1rem; font-weight: 600;">(YHH Training Hub)</span>
+                </div>
+                <div class="receipt-label-container">
+                    <div class="receipt-title">RECEIPT</div>
+                    <!-- LOGO: Uses 'logo.png' in the same directory -->
+                    <img src="logo.png" alt="Logo" style="max-height: 120px;" class="logo-img">
+                </div>
+            </header>
+
+            <!-- Bill To / Info -->
+            <div class="info-section">
+                <div class="info-group" style="flex-grow: 1;">
+                    <label class="label">Bill To</label>
+                    <input type="text" id="billTo" class="input-bare" placeholder="Enter Client Name">
+                </div>
+
+                <div class="info-group" style="align-items: flex-end;">
+                    <label class="label">Receipt No.</label>
+                    <div class="receipt-no-container">
+                        <input type="text" id="receiptNo" class="input-receipt" value="Loading..." readonly>
+                        <button class="btn-icon" onclick="toggleEditReceiptNo()" title="Edit Receipt No">✏️</button>
+                    </div>
+                </div>
+
+                <div class="info-group" style="align-items: flex-end;">
+                    <label class="label">Date</label>
+                    <div id="receiptDate" class="value-display"></div>
+                </div>
+            </div>
+
+            <!-- Items Table -->
+            <table class="items-table">
+                <thead>
+                    <tr>
+                        <th class="col-desc">Description</th>
+                        <th class="col-amount">Amount (RM)</th>
+                        <th class="col-action"></th>
+                    </tr>
+                </thead>
+                <tbody class="items-body">
+                    <!-- Rows will be added here -->
+                </tbody>
+            </table>
+
+            <!-- Bottom Section (Totals & Footer) -->
+            <div class="bottom-section">
+                <div class="totals-section">
+                    <div class="total-row">
+                        <span class="total-label">Subtotal</span>
+                        <span id="subTotal">0.00</span>
+                    </div>
+                    <div class="total-row">
+                        <span class="total-label">Discount</span>
+                        <input type="number" id="discountInput" class="discount-input" value="0"
+                            oninput="calculateTotals()">
+                    </div>
+                    <div class="total-row grand-total">
+                        <span class="total-label">Grand Total</span>
+                        <span class="total-amount" id="grandTotal">0.00</span>
+                    </div>
+                </div>
+
+                <footer class="page-footer">
+                    <p>Thank you for your business!</p>
+                    <p style="margin-top: 0.25rem;">This is a computer-generated receipt. No signature required.</p>
+                </footer>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxN85mcFXoxVQL0N43CnrHYRelAAHH8BsqYl9d-RcrEgrNelxVVGuM99wuY6EDMJlm4/exec";
+
+        // Configuration
+        const PAGE_MAX_HEIGHT = 1050; // A4 Safe Height
+
+        // Initialization
+        document.addEventListener('DOMContentLoaded', () => {
+            setCurrentDate();
+            fetchNextId();
+            addItem(); // Add one empty row by default
+        });
+
+        function setCurrentDate() {
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+            document.getElementById('receiptDate').textContent = `${dateStr} ${timeStr}`;
+        }
+
+        function toggleEditReceiptNo() {
+            const input = document.getElementById('receiptNo');
+            if (input.hasAttribute('readonly')) {
+                input.removeAttribute('readonly');
+                input.focus();
+            } else {
+                input.setAttribute('readonly', 'true');
+            }
+        }
+
+        // --- Data Operations ---
+
+        function fetchNextId() {
+            const display = document.getElementById('receiptNo');
+            display.value = "Loading ID...";
+
+            fetch(SCRIPT_URL)
+                .then(response => response.json())
+                .then(data => {
+                    display.value = data.nextId ? data.nextId : "Error";
+                })
+                .catch(err => {
+                    console.error('Fetch error:', err);
+                    display.value = "Offline";
+                });
+        }
+
+        function saveToDatabase() {
+            const btn = document.getElementById('btnSave');
+            const status = document.getElementById('statusMessage');
+
+            const clientName = document.getElementById('billTo').value.trim();
+            if (!clientName) {
+                alert("Please enter a Client Name.");
+                return;
+            }
+
+            const receiptNo = document.getElementById('receiptNo').value;
+            const date = document.getElementById('receiptDate').textContent;
+            const total = document.getElementById('grandTotal').textContent;
+
+            // Gather Items across ALL pages
+            const items = [];
+            document.querySelectorAll('.items-body tr').forEach(tr => {
+                const desc = tr.querySelector('.desc-input').value.trim();
+                const amt = tr.querySelector('.amount-input').value;
+                if (desc || amt) {
+                    items.push(`${desc} (${amt})`);
+                }
+            });
+            const descriptionStr = items.join(', ');
+
+            const payload = {
+                receiptNo: receiptNo,
+                date: date,
+                name: clientName,
+                description: descriptionStr,
+                total: total
+            };
+
+            btn.disabled = true;
+            btn.textContent = "Saving...";
+            status.textContent = "Sending data...";
+
+            fetch(SCRIPT_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+                .then(() => {
+                    alert("Saved Successfully!");
+                    btn.textContent = "Saved";
+                    status.textContent = "Data sent to server";
+                    setTimeout(() => {
+                        btn.disabled = false;
+                        btn.textContent = "Save to DB";
+                        status.textContent = "Ready";
+                        fetchNextId();
+                    }, 2000);
+                })
+                .catch(err => {
+                    console.error('Save error:', err);
+                    alert("Failed to save. Check console.");
+                    btn.disabled = false;
+                    btn.textContent = "Save to DB";
+                    status.textContent = "Error";
+                });
+        }
+
+        // --- Multi-Page Logic ---
+
+        function addItem() {
+            // Find the last page
+            const pages = document.querySelectorAll('.page');
+            const lastPage = pages[pages.length - 1];
+            const tbody = lastPage.querySelector('.items-body');
+
+            // Create Row
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><textarea class="desc-input" rows="1" placeholder="Item description" oninput="autoResize(this)"></textarea></td>
+                <td><input type="number" class="amount-input" placeholder="0.00" oninput="calculateTotals()" step="0.01"></td>
+                <td class="col-action"><button class="btn-delete" onclick="removeItem(this)" title="Remove Row">&times;</button></td>
+            `;
+            tbody.appendChild(tr);
+
+            // Check content overflow
+            checkPagination(lastPage);
+        }
+
+        function checkPagination(page) {
+            // Robust Height Check
+            // We use 'scrollHeight' (total content height) vs 'clientHeight' (visible height constrained by CSS if any, or A4 height if set)
+            // A4 Height is ~1123px. We check if content flows over 1050px safe limit or actual div height.
+            if (page.scrollHeight > page.clientHeight + 1) {
+                createNewPage(page);
+            }
+        }
+
+        function createNewPage(previousPage) {
+            const container = document.getElementById('pages-container');
+            const newPageNum = document.querySelectorAll('.page').length + 1;
+
+            const newPage = document.createElement('div');
+            newPage.className = 'page';
+            newPage.id = `page-${newPageNum}`;
+
+            // 1. Clone Header (Logo etc)
+            const headerContent = previousPage.querySelector('.header').cloneNode(true);
+
+            // Update Header Title for Pagination
+            const title = headerContent.querySelector('.receipt-title');
+            if (title) {
+                // Keep "RECEIPT" but maybe add page info subtly if desired, or keep as is.
+                // User asked for "Simplified Header (Logo + 'Page 2')".
+                title.textContent = "RECEIPT (Pg " + newPageNum + ")";
+                title.style.fontSize = "1.5rem"; // Slightly smaller
+            }
+
+            // 2. New Items Table
+            const startNewTable = document.createElement('table');
+            startNewTable.className = 'items-table';
+            startNewTable.innerHTML = `
+                <thead>
+                    <tr>
+                        <th class="col-desc">Description (Cont.)</th>
+                        <th class="col-amount">Amount (RM)</th>
+                        <th class="col-action"></th>
+                    </tr>
+                </thead>
+                <tbody class="items-body"></tbody>
+            `;
+
+            // 3. Move "Bottom Section" (Totals + Footer) to NEW Page
+            const bottomSection = previousPage.querySelector('.bottom-section');
+            const itemsBody = previousPage.querySelector('.items-body');
+            const lastRow = itemsBody.lastElementChild;
+
+            // Assemble Page
+            newPage.appendChild(headerContent);
+            newPage.appendChild(startNewTable);
+
+            if (bottomSection) {
+                newPage.appendChild(bottomSection);
+            }
+
+            container.appendChild(newPage);
+
+            // Move the row that caused overflow
+            if (lastRow) {
+                startNewTable.querySelector('.items-body').appendChild(lastRow);
+            }
+
+            // Re-check just in case (e.g. if the row itself was huge)
+            checkPagination(newPage);
+        }
+
+        // --- Table Actions ---
+
+        function removeItem(btn) {
+            const tr = btn.closest('tr');
+            const page = tr.closest('.page');
+            const tbody = tr.closest('tbody');
+
+            tr.remove();
+            calculateTotals();
+
+            // Pagination Cleanup: If page became empty (and is not the first one), remove it.
+            if (tbody.children.length === 0 && page.id !== 'page-1') {
+                const prevPage = page.previousElementSibling;
+                const bottomSection = page.querySelector('.bottom-section');
+
+                // If this page had the totals, move them back to the previous page
+                if (bottomSection && prevPage) {
+                    prevPage.appendChild(bottomSection);
+                }
+
+                page.remove();
+            }
+        }
+
+        function calculateTotals() {
+            let subtotal = 0;
+            // Scan ALL inputs across ANY pages
+            document.querySelectorAll('.amount-input').forEach(input => {
+                const val = parseFloat(input.value) || 0;
+                subtotal += val;
+            });
+
+            const discount = parseFloat(document.getElementById('discountInput').value) || 0;
+            const grandTotal = Math.max(0, subtotal - discount);
+
+            document.getElementById('subTotal').textContent = subtotal.toFixed(2);
+            document.getElementById('grandTotal').textContent = grandTotal.toFixed(2);
+        }
+
+        function autoResize(textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = textarea.scrollHeight + 'px';
+
+            const page = textarea.closest('.page');
+            checkPagination(page);
+        }
+
+        // --- Exports ---
+
+        async function generatePDF() {
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pages = document.querySelectorAll('.page');
+
+            for (let i = 0; i < pages.length; i++) {
+                if (i > 0) pdf.addPage();
+
+                const canvas = await html2canvas(pages[i], { scale: 2, useCORS: true });
+                const imgData = canvas.toDataURL('image/png');
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const imgProps = pdf.getImageProperties(imgData);
+                const imgHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, imgHeight);
+            }
+            pdf.save(`Receipt_${document.getElementById('receiptNo').value}.pdf`);
+        }
+
+        function exportPNG() {
+            const element = document.getElementById('pages-container');
+            html2canvas(element, { scale: 2 }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = `Receipt_${document.getElementById('receiptNo').value}.png`;
+                link.href = canvas.toDataURL();
+                link.click();
+            });
+        }
+
+        function exportExcel() {
+            const rows = [];
+            // Header
+            rows.push(["Receipt No", "Date", "Bill To"]);
+            rows.push([
+                document.getElementById('receiptNo').value,
+                document.getElementById('receiptDate').textContent,
+                document.getElementById('billTo').value
+            ]);
+            rows.push([]);
+
+            // Items
+            rows.push(["Description", "Amount"]);
+            document.querySelectorAll('.items-body tr').forEach(tr => {
+                const desc = tr.querySelector('.desc-input').value;
+                const amt = tr.querySelector('.amount-input').value;
+                rows.push([desc, amt]);
+            });
+            rows.push([]);
+
+            // Totals
+            rows.push(["", "Subtotal", document.getElementById('subTotal').textContent]);
+            rows.push(["", "Discount", document.getElementById('discountInput').value]);
+            rows.push(["", "Grand Total", document.getElementById('grandTotal').textContent]);
+
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(rows);
+            XLSX.utils.book_append_sheet(wb, ws, "Receipt");
+            XLSX.writeFile(wb, `Receipt_${document.getElementById('receiptNo').value}.xlsx`);
+        }
+    </script>
+</body>
+
+</html>
