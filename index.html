@@ -3,7 +3,6 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval'; script-src * 'unsafe-inline' 'unsafe-eval'; connect-src * 'unsafe-inline'; img-src * data: blob: 'unsafe-inline'; frame-src *;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Receipt Generator - A+ English</title>
     <!-- Fonts -->
@@ -11,6 +10,7 @@
     <!-- Scripts (CDNs) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
     <style>
         :root {
@@ -475,7 +475,24 @@
     <div class="control-panel" data-html2canvas-ignore="true">
         <h3>Actions</h3>
         <button class="btn btn-outline" onclick="addItem()">+ Add Row</button>
-        <button class="btn btn-success" id="btnSave" onclick="saveToDatabase()">Save to DB</button>
+
+        <!-- Button 1: Save Data -->
+        <button class="btn btn-primary" id="btnSaveData" onclick="saveDataOnly()">Save Data to Sheet</button>
+
+        <!-- Button 2: Upload PDF + Settings -->
+        <div style="display: flex; gap: 5px; align-items: center; width: 100%;">
+            <button class="btn btn-success" id="btnSavePdf" onclick="savePdfOnly()" style="flex-grow: 1;">Upload PDF to
+                Drive</button>
+            <button class="btn btn-outline" onclick="editFolderLink()" title="Set Drive Folder Link"
+                style="padding: 0.5rem;">
+                <!-- Simple Pencil Icon (SVG) -->
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 20h9"></path>
+                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                </svg>
+            </button>
+        </div>
 
         <div style="height: 10px;"></div>
 
@@ -569,7 +586,7 @@
     </div>
 
     <script>
-        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxDWpVRCpoN18QgWdg6MFaZGuW1hPMxnaR9On43tjzUGZFPi_BMmGjnaztBYC1mo3kF/exec";
+        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwSRHgI-pTkGqLviQhJsyO0KIAyLXdMOc1vHGq5OD86cyRoUvYvIaxndEbSSMXzhuml/exec";
 
         // Configuration
         const PAGE_MAX_HEIGHT = 1050; // A4 Safe Height
@@ -647,34 +664,34 @@
             return dataUri.replace('data:application/pdf;base64,', '');
         }
 
-        async function saveToDatabase() {
-            const btn = document.getElementById('btnSave');
+        async function saveDataOnly() {
+            const btn = document.getElementById('btnSaveData');
             const status = document.getElementById('statusMessage');
 
+            // 1. Validation
             const clientName = document.getElementById('billTo').value.trim();
             if (!clientName) {
                 alert("Please enter a Client Name.");
                 return;
             }
 
+            // 2. Gather Data
             const receiptNo = document.getElementById('receiptNo').value;
             const dateStr = document.getElementById('receiptDate').textContent;
             const total = document.getElementById('grandTotal').textContent;
 
-            // Extract Year and Month from dateStr (DD/MM/YYYY)
-            // Example: 17/12/2025 -> Year: 2025, Month: December
+            // Date Parsing
             let year = "";
             let monthName = "";
             try {
                 const [d, m, y] = dateStr.split('/');
                 year = y;
-                // javascript months are 0-indexed (0=Jan, 11=Dec)
                 monthName = new Date(parseInt(y), parseInt(m) - 1, parseInt(d)).toLocaleString('default', { month: 'long' });
             } catch (e) {
                 console.error("Date parse error", e);
             }
 
-            // Gather Items across ALL pages
+            // Items Parsing
             const items = [];
             document.querySelectorAll('.items-body tr').forEach(tr => {
                 const descVal = tr.querySelector('.desc-input').value.trim();
@@ -685,30 +702,87 @@
             });
             const descriptionStr = items.join(', ');
 
-            // UI Feedback
+            // 3. UI Update
             btn.disabled = true;
-            btn.textContent = "Generating PDF...";
-            status.textContent = "Creating receipt file...";
+            btn.textContent = "Saving...";
+            status.textContent = "Sending text data...";
+
+            // 4. Send Request
+            const payload = {
+                action: 'saveData',
+                receiptNo: receiptNo,
+                date: dateStr,
+                name: clientName,
+                description: descriptionStr,
+                total: total, // Keeping 'total' as per original, assuming script maps it or 'Amount'
+                amount: total, // Sending 'amount' as well to be safe based on user request "Amount"
+                year: year,
+                month: monthName
+            };
 
             try {
-                // 1. Generate PDF First
-                const pdfBase64 = await getPdfBase64();;
+                await fetch(SCRIPT_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
 
-                // 2. Prepare Payload
+                // Success
+                status.textContent = "Data Saved!";
+                btn.textContent = "Saved";
+
+                // Refresh ID after data save
+                fetchNextId();
+
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.textContent = "Save Data to Sheet";
+                }, 2000);
+
+            } catch (err) {
+                console.error('Save Data Error:', err);
+                status.textContent = "Error Saving Data";
+                btn.disabled = false;
+                btn.textContent = "Save Data to Sheet";
+                alert("Failed to save data.");
+            }
+        }
+
+        async function savePdfOnly() {
+            const btn = document.getElementById('btnSavePdf');
+            const status = document.getElementById('statusMessage');
+
+            // 1. Check Folder Link
+            const folderLink = localStorage.getItem('googleDriveFolderLink');
+            if (!folderLink) {
+                alert('Please set folder link first (Click the pencil icon)');
+                return;
+            }
+
+            const clientName = document.getElementById('billTo').value.trim();
+            const receiptNo = document.getElementById('receiptNo').value;
+
+            // 2. UI Update
+            btn.disabled = true;
+            btn.textContent = "Generating...";
+            status.textContent = "Generating PDF...";
+
+            try {
+                // 3. Generate PDF
+                const pdfBase64 = await getPdfBase64();
+
+                status.textContent = "Uploading PDF...";
+                btn.textContent = "Uploading...";
+
+                // 4. Send Request
                 const payload = {
-                    receiptNo: receiptNo,
-                    date: dateStr,
-                    name: clientName,
-                    description: descriptionStr,
-                    total: total,
+                    action: 'savePDF',
                     pdfBase64: pdfBase64,
-                    year: year,
-                    month: monthName
+                    folderLink: folderLink,
+                    receiptNo: receiptNo,
+                    name: clientName
                 };
-
-                // 3. Send
-                btn.textContent = "Saving...";
-                status.textContent = "Sending data to Database...";
 
                 await fetch(SCRIPT_URL, {
                     method: 'POST',
@@ -717,24 +791,39 @@
                     body: JSON.stringify(payload)
                 });
 
-                // 4. Success
-                alert("Saved Successfully!");
-                btn.textContent = "Saved";
-                status.textContent = "Data sent to server";
+                // Success
+                status.textContent = "PDF Uploaded!";
+                btn.textContent = "Uploaded";
 
                 setTimeout(() => {
                     btn.disabled = false;
-                    btn.textContent = "Save to DB";
-                    status.textContent = "Ready";
-                    fetchNextId();
+                    btn.textContent = "Upload PDF to Drive";
                 }, 2000);
 
             } catch (err) {
-                console.error('Save error:', err);
-                alert("Failed to save or generate PDF. Check console.");
+                console.error('Save PDF Error:', err);
+                status.textContent = "Error Uploading PDF";
                 btn.disabled = false;
-                btn.textContent = "Save to DB";
-                status.textContent = "Error";
+                btn.textContent = "Upload PDF to Drive";
+                alert("Failed to upload PDF.");
+            }
+        }
+
+        function editFolderLink() {
+            const currentLink = localStorage.getItem('googleDriveFolderLink') || '';
+            const newLink = prompt("Paste your Google Drive Folder Link here:", currentLink);
+
+            if (newLink !== null) {
+                const trimmed = newLink.trim();
+                if (trimmed) {
+                    localStorage.setItem('googleDriveFolderLink', trimmed);
+                    // Optional: Visual confirmation
+                    // alert("Folder Link Saved!"); 
+                } else {
+                    // Empty string cleared it? Or just ignored?
+                    // User might want to clear it.
+                    localStorage.removeItem('googleDriveFolderLink');
+                }
             }
         }
 
@@ -932,10 +1021,3 @@
 </body>
 
 </html>
-
-
-
-
-
-
-
