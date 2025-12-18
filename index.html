@@ -640,40 +640,45 @@
          * Helper to generate JPEG Blob Base64 (Single Vertical Image)
          */
         async function getReceiptImageBase64() {
-            const pages = document.querySelectorAll('.page');
-            const scale = 1.5; // Optimization: Scale 1.5
-            const quality = 0.6; // Optimization: JPEG Quality 0.6 (Strictly <10MB)
+            const restoreDiscount = hideDiscountIfZero();
+            try {
+                const pages = document.querySelectorAll('.page');
+                const scale = 1.5; // Optimization: Scale 1.5
+                const quality = 0.6; // Optimization: JPEG Quality 0.6 (Strictly <10MB)
 
-            // 1. Capture all pages
-            const canvasPromises = Array.from(pages).map(page =>
-                html2canvas(page, { scale: scale, useCORS: true, logging: false })
-            );
-            const canvases = await Promise.all(canvasPromises);
+                // 1. Capture all pages
+                const canvasPromises = Array.from(pages).map(page =>
+                    html2canvas(page, { scale: scale, useCORS: true, logging: false })
+                );
+                const canvases = await Promise.all(canvasPromises);
 
-            // 2. Calculate total dimensions
-            let totalHeight = 0;
-            let maxWidth = 0;
-            canvases.forEach(c => {
-                totalHeight += c.height;
-                maxWidth = Math.max(maxWidth, c.width);
-            });
+                // 2. Calculate total dimensions
+                let totalHeight = 0;
+                let maxWidth = 0;
+                canvases.forEach(c => {
+                    totalHeight += c.height;
+                    maxWidth = Math.max(maxWidth, c.width);
+                });
 
-            // 3. Create master canvas
-            const masterCanvas = document.createElement('canvas');
-            masterCanvas.width = maxWidth;
-            masterCanvas.height = totalHeight;
-            const ctx = masterCanvas.getContext('2d');
+                // 3. Create master canvas
+                const masterCanvas = document.createElement('canvas');
+                masterCanvas.width = maxWidth;
+                masterCanvas.height = totalHeight;
+                const ctx = masterCanvas.getContext('2d');
 
-            // 4. Draw images vertically
-            let currentY = 0;
-            canvases.forEach(c => {
-                ctx.drawImage(c, 0, currentY);
-                currentY += c.height;
-            });
+                // 4. Draw images vertically
+                let currentY = 0;
+                canvases.forEach(c => {
+                    ctx.drawImage(c, 0, currentY);
+                    currentY += c.height;
+                });
 
-            // 5. Export as JPEG
-            const dataUri = masterCanvas.toDataURL('image/jpeg', quality);
-            return dataUri.replace('data:image/jpeg;base64,', '');
+                // 5. Export as JPEG
+                const dataUri = masterCanvas.toDataURL('image/jpeg', quality);
+                return dataUri.replace('data:image/jpeg;base64,', '');
+            } finally {
+                restoreDiscount();
+            }
         }
 
         async function saveDataOnly() {
@@ -972,30 +977,62 @@
         // --- Exports ---
 
         // Re-use logic for manual download
-        async function generatePDF() {
-            const { jsPDF } = window.jspdf;
-            const pdf = new jsPDF('p', 'mm', 'a4');
-            const pages = document.querySelectorAll('.page');
+        function hideDiscountIfZero() {
+            const discountInput = document.getElementById('discountInput');
+            const discountRow = discountInput ? discountInput.closest('.total-row') : null;
+            const shouldHide = discountInput && (parseFloat(discountInput.value) || 0) === 0;
+            let originalDisplay = '';
 
-            for (let i = 0; i < pages.length; i++) {
-                if (i > 0) pdf.addPage();
-                const canvas = await html2canvas(pages[i], { scale: 2, useCORS: true });
-                const imgData = canvas.toDataURL('image/png');
-                const pdfWidth = pdf.internal.pageSize.getWidth();
-                const imgProps = pdf.getImageProperties(imgData);
-                const imgHeight = (imgProps.height * pdfWidth) / imgProps.width;
-                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, imgHeight);
+            if (shouldHide && discountRow) {
+                originalDisplay = discountRow.style.display;
+                discountRow.style.display = 'none';
             }
-            pdf.save(`Receipt_${document.getElementById('receiptNo').value}.pdf`);
+
+            return function restore() {
+                if (shouldHide && discountRow) {
+                    discountRow.style.display = originalDisplay;
+                }
+            };
+        }
+
+        async function generatePDF() {
+            const restoreDiscount = hideDiscountIfZero();
+            try {
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const pages = document.querySelectorAll('.page');
+
+                for (let i = 0; i < pages.length; i++) {
+                    if (i > 0) pdf.addPage();
+                    const canvas = await html2canvas(pages[i], { scale: 2, useCORS: true });
+                    const imgData = canvas.toDataURL('image/png');
+                    const pdfWidth = pdf.internal.pageSize.getWidth();
+                    const imgProps = pdf.getImageProperties(imgData);
+                    const imgHeight = (imgProps.height * pdfWidth) / imgProps.width;
+                    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, imgHeight);
+                }
+                pdf.save(`Receipt_${document.getElementById('receiptNo').value}.pdf`);
+            } catch (error) {
+                console.error("PDF Generation Error:", error);
+                alert("Failed to generate PDF");
+            } finally {
+                restoreDiscount();
+            }
         }
 
         function exportPNG() {
+            const restoreDiscount = hideDiscountIfZero();
             const element = document.getElementById('pages-container');
+
             html2canvas(element, { scale: 2 }).then(canvas => {
                 const link = document.createElement('a');
                 link.download = `Receipt_${document.getElementById('receiptNo').value}.png`;
                 link.href = canvas.toDataURL();
                 link.click();
+                restoreDiscount();
+            }).catch(err => {
+                console.error("PNG Export Error:", err);
+                restoreDiscount();
             });
         }
 
@@ -1033,6 +1070,3 @@
 </body>
 
 </html>
-
-
-
