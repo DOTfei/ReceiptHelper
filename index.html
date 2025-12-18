@@ -481,7 +481,7 @@
 
         <!-- Button 2: Upload PDF + Settings -->
         <div style="display: flex; gap: 5px; align-items: center; width: 100%;">
-            <button class="btn btn-success" id="btnSavePdf" onclick="savePdfOnly()" style="flex-grow: 1;">Upload PDF to
+            <button class="btn btn-success" id="btnSavePdf" onclick="savePdfOnly()" style="flex-grow: 1;">Upload JPEG to
                 Drive</button>
             <button class="btn btn-outline" onclick="editFolderLink()" title="Set Drive Folder Link"
                 style="padding: 0.5rem;">
@@ -586,7 +586,7 @@
     </div>
 
     <script>
-        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyFozKlxGfPHH93VFZSIoii2AnRITmChfI-9hCwdmGCGd11UofUE-jQo2O125MXrPEz/exec";
+        const SCRIPT_URL = "https://script.google.com/macros/library/d/1yAlL7yWXZen3b16Ocmz8uJqRr7yWD5OCz9ux70L6QxmsBwdHEgbkn6ix/12";
 
         // Configuration
         const PAGE_MAX_HEIGHT = 1050; // A4 Safe Height
@@ -642,7 +642,7 @@
         async function getReceiptImageBase64() {
             const pages = document.querySelectorAll('.page');
             const scale = 1.5; // Optimization: Scale 1.5
-            const quality = 0.7; // Optimization: JPEG Quality 0.7
+            const quality = 0.6; // Optimization: JPEG Quality 0.6 (Strictly <10MB)
 
             // 1. Capture all pages
             const canvasPromises = Array.from(pages).map(page =>
@@ -809,14 +809,14 @@
 
                 setTimeout(() => {
                     btn.disabled = false;
-                    btn.textContent = "Upload PDF to Drive";
+                    btn.textContent = "Upload JPEG to Drive";
                 }, 2000);
 
             } catch (err) {
                 console.error('Save Image Error:', err);
                 status.textContent = "Error Uploading";
                 btn.disabled = false;
-                btn.textContent = "Upload PDF to Drive";
+                btn.textContent = "Upload JPEG to Drive";
                 alert("Failed to upload image.");
             }
         }
@@ -1033,4 +1033,3 @@
 </body>
 
 </html>
-
