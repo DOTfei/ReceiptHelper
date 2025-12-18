@@ -586,7 +586,7 @@
     </div>
 
     <script>
-        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyFozKlxGfPHH93VFZSIoii2AnRITmChfI-9hCwdmGCGd11UofUE-jQo2O125MXrPEz/exec";
+        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxN85mcFXoxVQL0N43CnrHYRelAAHH8BsqYl9d-RcrEgrNelxVVGuM99wuY6EDMJlm4/exec";
 
         // Configuration
         const PAGE_MAX_HEIGHT = 1050; // A4 Safe Height
@@ -637,31 +637,43 @@
         }
 
         /**
-         * Helper to generate PDF Blob Base64
+         * Helper to generate JPEG Blob Base64 (Single Vertical Image)
          */
-        async function getPdfBase64() {
-            const { jsPDF } = window.jspdf;
-            const pdf = new jsPDF('p', 'mm', 'a4');
+        async function getReceiptImageBase64() {
             const pages = document.querySelectorAll('.page');
+            const scale = 1.5; // Optimization: Scale 1.5
+            const quality = 0.7; // Optimization: JPEG Quality 0.7
 
-            for (let i = 0; i < pages.length; i++) {
-                if (i > 0) pdf.addPage();
+            // 1. Capture all pages
+            const canvasPromises = Array.from(pages).map(page =>
+                html2canvas(page, { scale: scale, useCORS: true, logging: false })
+            );
+            const canvases = await Promise.all(canvasPromises);
 
-                // Capture the page content
-                // We use scale: 2 for better quality images
-                const canvas = await html2canvas(pages[i], { scale: 2, useCORS: true });
-                const imgData = canvas.toDataURL('image/png');
+            // 2. Calculate total dimensions
+            let totalHeight = 0;
+            let maxWidth = 0;
+            canvases.forEach(c => {
+                totalHeight += c.height;
+                maxWidth = Math.max(maxWidth, c.width);
+            });
 
-                const pdfWidth = pdf.internal.pageSize.getWidth();
-                const imgProps = pdf.getImageProperties(imgData);
-                const imgHeight = (imgProps.height * pdfWidth) / imgProps.width;
+            // 3. Create master canvas
+            const masterCanvas = document.createElement('canvas');
+            masterCanvas.width = maxWidth;
+            masterCanvas.height = totalHeight;
+            const ctx = masterCanvas.getContext('2d');
 
-                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, imgHeight);
-            }
+            // 4. Draw images vertically
+            let currentY = 0;
+            canvases.forEach(c => {
+                ctx.drawImage(c, 0, currentY);
+                currentY += c.height;
+            });
 
-            // Return clean base64 (without prefix)
-            const dataUri = pdf.output('datauristring');
-            return dataUri.replace('data:application/pdf;base64,', '');
+            // 5. Export as JPEG
+            const dataUri = masterCanvas.toDataURL('image/jpeg', quality);
+            return dataUri.replace('data:image/jpeg;base64,', '');
         }
 
         async function saveDataOnly() {
@@ -765,20 +777,20 @@
 
             // 2. UI Update
             btn.disabled = true;
-            btn.textContent = "Generating...";
-            status.textContent = "Generating PDF...";
+            btn.textContent = "Processing...";
+            status.textContent = "Capturing Image...";
 
             try {
-                // 3. Generate PDF
-                const pdfBase64 = await getPdfBase64();
+                // 3. Generate Image (JPEG)
+                const imageBase64 = await getReceiptImageBase64();
 
-                status.textContent = "Uploading PDF...";
+                status.textContent = "Uploading Image...";
                 btn.textContent = "Uploading...";
 
                 // 4. Send Request
                 const payload = {
-                    action: 'savePDF',
-                    pdfBase64: pdfBase64,
+                    action: 'saveImage', // Updated action
+                    pdfBase64: imageBase64, // Keeping key same as requested, but sending image data
                     folderLink: folderLink,
                     receiptNo: receiptNo,
                     name: clientName
@@ -792,7 +804,7 @@
                 });
 
                 // Success
-                status.textContent = "PDF Uploaded!";
+                status.textContent = "Image Uploaded!";
                 btn.textContent = "Uploaded";
 
                 setTimeout(() => {
@@ -801,11 +813,11 @@
                 }, 2000);
 
             } catch (err) {
-                console.error('Save PDF Error:', err);
-                status.textContent = "Error Uploading PDF";
+                console.error('Save Image Error:', err);
+                status.textContent = "Error Uploading";
                 btn.disabled = false;
                 btn.textContent = "Upload PDF to Drive";
-                alert("Failed to upload PDF.");
+                alert("Failed to upload image.");
             }
         }
 
@@ -1021,7 +1033,3 @@
 </body>
 
 </html>
-
-
-
-
